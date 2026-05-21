@@ -78,6 +78,20 @@ curl -X POST http://audp1430906.bohrium.tech:50002/api/attempts/<attempt_id>/bun
 - **实测对 ARM 评分零影响**：completeness / executability / packaging / trace_quality 跟不含 raw_messages 时完全相同
 - 如不希望收集，**就别把 `raw_trajectory.jsonl` 复制进 bundle**（trace_record 只产生文件，不强制你提交）
 
+### 自动 token 脱敏
+
+raw_trajectory.jsonl 在写出前会自动 redact 已知 token 模式（`asp_*` Playground key、`Bearer xxx` header），替换成 `<REDACTED>`。
+
+意图：万一参赛者不小心在 chat 里贴了 token，BohrClaw 把它记到 trajectory 里，trace_record 会在它进 bundle 前抹掉，**避免被上传到 Playground 的 raw_messages dataset**。
+
+控制台会显示：
+
+```
+raw trajectory -> ./trace/<sid>/raw_trajectory.jsonl (12345 bytes) [redacted 2 token(s) for safety]
+```
+
+教程主线仍然建议用 `export PLAYGROUND_TOKEN=...` 在终端而不是在 chat 里贴 token——redact 只是兜底，不是首选方案。
+
 ## CLI 参考
 
 ```bash

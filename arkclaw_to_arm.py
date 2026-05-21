@@ -19,9 +19,33 @@ Usage:
 """
 import argparse
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
+
+
+# Token patterns to scrub from raw_trajectory.jsonl before it leaves the
+# contestant's machine. The raw trajectory gets uploaded to Playground in
+# the bundle and may later be shared as a research dataset, so any auth
+# credentials accidentally pasted into chat must be redacted.
+TOKEN_PATTERNS = [
+    # Playground API token: asp_ + 40+ alphanumeric chars
+    re.compile(r'asp_[a-zA-Z0-9]{40,}'),
+    # Bearer headers that wrap any token
+    re.compile(r'(Bearer\s+)[A-Za-z0-9._\-]{20,}', re.IGNORECASE),
+]
+
+
+def redact_tokens(text: str) -> tuple[str, int]:
+    """Replace any auth tokens with <REDACTED>. Returns (clean_text, count)."""
+    total = 0
+    for pat in TOKEN_PATTERNS:
+        text, n = pat.subn(lambda m: (
+            m.group(1) + '<REDACTED>' if m.lastindex else '<asp_TOKEN_REDACTED>'
+        ), text)
+        total += n
+    return text, total
 
 
 # Approximate USD pricing (per 1M tokens). Adjust as providers update rates.
@@ -223,8 +247,13 @@ def main():
     if args.raw_out:
         raw_out = Path(args.raw_out).expanduser()
         raw_out.parent.mkdir(parents=True, exist_ok=True)
-        raw_out.write_bytes(inp.read_bytes())
-        print(f'raw trajectory -> {raw_out} ({raw_out.stat().st_size} bytes)')
+        raw_text = inp.read_text(encoding='utf-8', errors='replace')
+        clean_text, n_redacted = redact_tokens(raw_text)
+        raw_out.write_text(clean_text, encoding='utf-8')
+        msg = f'raw trajectory -> {raw_out} ({raw_out.stat().st_size} bytes)'
+        if n_redacted:
+            msg += f' [redacted {n_redacted} token(s) for safety]'
+        print(msg)
 
     by = {}
     for s in steps:
